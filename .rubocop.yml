@@ -1,0 +1,10 @@
+inherit_from: .rubocop_todo.yml
+
+#######
+# WIP These should all go back to defaults at some point
+Metrics/AbcSize:
+  Max: 22
+Metrics/MethodLength:
+  Max: 20
+Metrics/ClassLength:
+  Max: 190
