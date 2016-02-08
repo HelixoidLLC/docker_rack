@@ -1,10 +1,13 @@
 inherit_from: .rubocop_todo.yml
 
+AllCops:
+  TargetRubyVersion: 2.2
+
 #######
 # WIP These should all go back to defaults at some point
 Metrics/AbcSize:
   Max: 22
 Metrics/MethodLength:
-  Max: 30
+  Max: 40
 Metrics/ClassLength:
   Max: 190

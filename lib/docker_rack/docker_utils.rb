@@ -41,32 +41,30 @@ module Docker
 
     def self.stop_container(container_template)
 
-      container_template.each do |template_id, _|
-        name = template_id
-        # containers = `docker ps`
-        ps = containers_by_name(name)
-        ps.each do |line|
-          if line != ''
-            cmd = "docker inspect -f {{.State.Running}} #{line}"
-            puts cmd if LOG_LEVEL == 'DEBUG'
-            is_running = `#{cmd}`.strip
-            if is_running == 'true'
-              cmd = "docker kill #{line}"
-              puts cmd if LOG_LEVEL == 'DEBUG'
-              `#{cmd}`
-            else
-              puts 'Container not running. Nothing to kill. Skipping...'
-            end
-          end
-        end
-
-        ps = containers_by_name(name)
-        ps.each do |line|
-          if line != ''
-            cmd = "docker rm #{line}"
+      name = container_template['name']
+      # containers = `docker ps`
+      ps = containers_by_name(name)
+      ps.each do |line|
+        if line != ''
+          cmd = "docker inspect -f {{.State.Running}} #{line}"
+          puts cmd if LOG_LEVEL == 'DEBUG'
+          is_running = `#{cmd}`.strip
+          if is_running == 'true'
+            cmd = "docker kill #{line}"
             puts cmd if LOG_LEVEL == 'DEBUG'
             `#{cmd}`
+          else
+            puts 'Container not running. Nothing to kill. Skipping...'
           end
+        end
+      end
+
+      ps = containers_by_name(name)
+      ps.each do |line|
+        if line != ''
+          cmd = "docker rm #{line}"
+          puts cmd if LOG_LEVEL == 'DEBUG'
+          `#{cmd}`
         end
       end
     end

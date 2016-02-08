@@ -1,5 +1,3 @@
-# rubocop:disable Metrics/AbcSize
-
 require 'rake'
 require 'rake/tasklib'
 require 'pathname'
@@ -83,15 +81,11 @@ module Container
       private
 
       def load_templates(path, pattern)
-        curr = Pathname.new(Dir.pwd) + path
+        # curr = Pathname.new(Dir.pwd) + path
         # puts "Current: #{curr}"
 
         FileList[File.join(path, pattern)].each do |f|
-          full_path     = File.expand_path(f)
-          template_name = Pathname(strip_extension(full_path)).relative_path_from(curr)
-          # puts "Found #{template_name}: #{friendly_name(template_name.to_s)}"
-
-          load_template ('container:' + friendly_name(template_name.to_s)), full_path, template_name.to_s
+          load_template_from_file File.expand_path(f)
         end
       end
 
@@ -105,35 +99,71 @@ module Container
             .gsub(/\s+/, '_')
       end
 
-      def load_template(name, path, template_name, *args)
-        args || args = []
+      def load_template_from_file(path)
+        load_container_template(path).each do |_, container_template|
+          define_start_task container_template, path
+          define_stop_task container_template, path
+          define_restart_task container_template, path
+          define_help_task container_template, path
+        end
+      end
 
-        # desc "Starting #{template_name}"
-        task (name + ':start').to_sym do
-          puts "Starting: #{path}"
-          Docker::Utils.start_container load_container_template(path)
+      def define_start_task(container_template, path)
+        container_name = "container:#{container_template['name']}:start"
+        dependencies = container_template['depends']
+
+        args = []
+        if dependencies.nil?
+          args.insert 0, container_name
+        else
+          args.insert 0, container_name => dependencies.map { |id| "container:#{id}:start" }
         end
 
-        # # desc "Stopping #{template_name}"
-        task (name + ':stop').to_sym do
+        body = proc do
+          puts "Starting: #{path}"
+          Docker::Utils.start_container container_template
+        end
+
+        Rake::Task.define_task(*args, &body)
+      end
+
+      def define_stop_task(container_template, path)
+        container_name = "container:#{container_template['name']}:stop"
+        dependencies = container_template['depends'] || []
+
+        args = []
+        args.insert 0, container_name
+
+        body = proc do
           puts "Stopping: #{path}"
-          container_template = load_template_file(path)
           Docker::Utils.stop_container container_template
         end
 
-        # # desc "Restarting #{template_name}"
-        task (name + ':restart').to_sym do
-          puts "Restarting: #{path}"
-          Rake::Task[name + ':stop'].invoke
-          Rake::Task[name + ':start'].invoke
-        end
+        Rake::Task.define_task(*args, &body)
 
-        desc "Tasks help for #{template_name}"
-        task (name + ':help').to_sym do
+        # Create reverse dependency
+        dependencies.map { |id| "container:#{id}:stop" }.each do |id|
+          task id => container_name
+        end
+      end
+
+      def define_restart_task(container_template, path)
+        container_name = "container:#{container_template['name']}"
+        task (container_name + ':restart').to_sym do
+          puts "Restarting: #{path}"
+          Rake::Task[container_name + ':stop'].invoke
+          Rake::Task[container_name + ':start'].invoke
+        end
+      end
+
+      def define_help_task(container_template, path)
+        container_name = "container:#{container_template['name']}"
+        desc "Tasks help for #{container_name}"
+        task (container_name + ':help').to_sym do
           puts "Tasks for: #{path}"
-          puts "rake #{name}:start\t\t# Starting #{template_name}"
-          puts "rake #{name}:stop\t\t# Stopping #{template_name}"
-          puts "rake #{name}:restart\t\t# Restarting #{template_name}"
+          printf("%-40s %-40s\n\r", "#{container_name}:start", "# Starting   #{container_name}")
+          printf("%-40s %-40s\n\r", "#{container_name}:stop", "# Stopping   #{container_name}")
+          printf("%-40s %-40s\n\r", "#{container_name}:restart", "# Restarting #{container_name}")
         end
       end
 
@@ -158,12 +188,10 @@ module Container
 
         container_template.each do |template_id, template|
           template['name'] = template_id
-          if template.key? 'environment'
-            environment                 = template['environment']
-            # TODO: simplify this
-            environment['LOG_LEVEL']    = LOG_LEVEL unless environment.key? 'LOG_LEVEL'
-          end
-          return template
+          next unless template.key? 'environment'
+          environment                 = template['environment']
+          # TODO: simplify this
+          environment['LOG_LEVEL']    = LOG_LEVEL unless environment.key? 'LOG_LEVEL'
         end
       end
     end
