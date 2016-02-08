@@ -1,11 +1,17 @@
+# rubocop:disable Metrics/AbcSize
+
 require 'rake'
 require 'rake/tasklib'
 require 'pathname'
 require 'erb'
 require 'ostruct'
 require 'yaml'
+require 'json/ext'
+require 'net/http'
+
 require_relative 'docker_utils'
 require_relative 'dev_environment'
+require_relative 'utils'
 
 module Container
   module Templates
@@ -37,6 +43,8 @@ module Container
         options.dryrun = false
 
         Rake::TaskManager.record_task_metadata = true
+
+        $environment = environment
       end
 
       def process(params)
@@ -53,13 +61,6 @@ module Container
         end
       end
 
-      def options
-        options = OpenStruct.new
-        options.trace = false
-        options.dryrun = false
-        options
-      end
-
       def tasks
         Rake.application.tasks()
       end
@@ -68,9 +69,15 @@ module Container
         tasks.any? { |task| task.name == task_name }
       end
 
-
       def invoke(name)
         Rake.application[name].invoke
+      end
+
+      def environment
+        {
+            dockerhost: Docker::Utils.dockerhost,
+            work_dir: Environment.work_dir
+        }
       end
 
       private
@@ -102,27 +109,27 @@ module Container
         args || args = []
 
         # desc "Starting #{template_name}"
-        task (name + ":start").to_sym do
+        task (name + ':start').to_sym do
           puts "Starting: #{path}"
           Docker::Utils.start_container load_container_template(path)
         end
 
         # # desc "Stopping #{template_name}"
-        task (name + ":stop").to_sym do
+        task (name + ':stop').to_sym do
           puts "Stopping: #{path}"
           container_template = load_template_file(path)
           Docker::Utils.stop_container container_template
         end
 
         # # desc "Restarting #{template_name}"
-        task (name + ":restart").to_sym do
+        task (name + ':restart').to_sym do
           puts "Restarting: #{path}"
-          Rake::Task[name + ":stop"].invoke
-          Rake::Task[name + ":start"].invoke
+          Rake::Task[name + ':stop'].invoke
+          Rake::Task[name + ':start'].invoke
         end
 
         desc "Tasks help for #{template_name}"
-        task (name + ":help").to_sym do
+        task (name + ':help').to_sym do
           puts "Tasks for: #{path}"
           puts "rake #{name}:start\t\t# Starting #{template_name}"
           puts "rake #{name}:stop\t\t# Stopping #{template_name}"
@@ -133,17 +140,15 @@ module Container
       def load_template_file(file_path)
         puts "Loading #{file_path}" if LOG_LEVEL == 'DEBUG'
 
-        vars = {
-            dockerhost: Docker::Utils.dockerhost,
-            work_dir: Environment.work_dir
-        }
+        vars = environment
 
         container_template = YAML.load_file(file_path)
         if Pathname.new(file_path).basename.to_s.include? '.erb'
-          template           = ERB.new(container_template.to_yaml).result(OpenStruct.new(vars).instance_eval { binding })
-          puts template if LOG_LEVEL == 'DEBUG'
+          template = ERB.new(container_template.to_yaml).result(OpenStruct.new(vars).instance_eval { binding })
           container_template = YAML.load(template)
         end
+
+        puts container_template.to_yaml if LOG_LEVEL == 'DEBUG'
 
         return container_template
       end

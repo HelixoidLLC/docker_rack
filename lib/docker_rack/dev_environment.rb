@@ -50,9 +50,9 @@ module Environment
       # http.set_debug_output($stdout)
       header = {'Content-Type' => 'text/json'}
       request = Net::HTTP::Put.new(uri.request_uri, initheader = header)
-      #request.add_field('Content-Type', 'application/json')
-      #request.add_field('Content-Type', 'text/plain; charset=utf-8')
-      request.body = payload #.to_json
+      # request.add_field('Content-Type', 'application/json')
+      # request.add_field('Content-Type', 'text/plain; charset=utf-8')
+      request.body = payload # .to_json
       response = http.request(request)
       result = response.body
     else

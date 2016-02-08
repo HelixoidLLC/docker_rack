@@ -1,10 +1,12 @@
+# rubocop:disable Metrics/AbcSize
+
 module Docker
   class Utils
 
     def self.dockerhost
       @dockerhost = ENV['DOCKER_HOST']
       return nil if @dockerhost.nil?
-      @dockerhost[/tcp:\/\/([^:]+)/,1]
+      @dockerhost[/tcp:\/\/([^:]+)/, 1]
     end
 
     def self.create_docker_command(info)
@@ -73,6 +75,7 @@ module Docker
       command = create_docker_command(info)
       puts command if LOG_LEVEL == 'DEBUG'
       if present?(info['name'])
+        skip_first_sleep = true
         puts 'Detected as running. Skipping ....' # if LOG_LEVEL == 'DEBUG'
       else
         `#{command}`
@@ -80,23 +83,19 @@ module Docker
       Array(info['checks']).each do |check|
         try = (check['retry'] || 3).to_i
         interval = (check['interval'] || 2).to_i
+        check['ip'] ||= dockerhost
+        detect_check(check)
         while true
-          sleep interval
+          sleep interval unless skip_first_sleep
+          skip_first_sleep = false
           put_char '.' if LOG_LEVEL != 'DEBUG'
           case check['type']
             when 'port'
-              puts "Checking port #{check['ip']}:#{check['port']} availability." if LOG_LEVEL == 'DEBUG'
-              result = is_port_open?(check['ip'], check['port'])
-              puts "Result: #{result}" if LOG_LEVEL == 'DEBUG'
-              break if result
+              break if check_port(check)
             when 'rest'
-              puts "Checking HTTP response #{check['uri']}." if LOG_LEVEL == 'DEBUG'
-              result = is_http_present?(check['uri'])
-              puts "Result: #{result}" if LOG_LEVEL == 'DEBUG'
-              break if result
+              break if check_rest(check)
             when 'script'
-              `#{check['script']}`
-              break if $?.to_i == 0
+              break if check_script(check)
             else
               puts 'Unrecognizable check type. Skipping ...'
           end
@@ -105,6 +104,34 @@ module Docker
         end
         puts
       end
+    end
+
+    def self.detect_check(check)
+      return if check.key?('type')
+      if check.key?('port')
+        check['type'] = 'port'
+      elsif check.key?('uri')
+        check['type'] = 'rest'
+      end
+    end
+
+    def self.check_port(check)
+      puts "Checking port #{check['ip']}:#{check['port']} availability." if LOG_LEVEL == 'DEBUG'
+      result = is_port_open?(check['ip'], check['port'])
+      puts "Result: #{result}" if LOG_LEVEL == 'DEBUG'
+      return result
+    end
+
+    def self.check_rest(check)
+      puts "Checking HTTP response #{check['uri']}." if LOG_LEVEL == 'DEBUG'
+      result = is_http_present?(check['uri'])
+      puts "Result: #{result}" if LOG_LEVEL == 'DEBUG'
+      return result
+    end
+
+    def self.check_script(check)
+      `#{check['script']}`
+      return $?.to_i == 0
     end
 
     def self.put_char(str)
@@ -144,7 +171,7 @@ module Docker
     end
 
     def self.present?(name)
-      ! containers_by_name(name).empty?
+      !containers_by_name(name).empty?
     end
 
     def self.containers_by_name(name)
