@@ -23,6 +23,7 @@ module Docker
       docker_cmd.push info['volumes'].map { |volume| "-v #{quote_parts(volume)}" } if info.key? 'volumes'
       docker_cmd.push "--net=\"#{info['net']}\"" if info.key? 'net'
       docker_cmd.push '--privileged' if info['privileged'] == true
+      docker_cmd.push "--pid=\"#{info['pid']}\"" if info.key? 'pid'
       docker_cmd.push "--log-driver=\"#{info['log-driver']}\"" if info.key? 'log-driver'
       docker_cmd.push info['log-opt'].map { |k, v| "--log-opt #{k.to_s}=\"#{v}\"" } if info.key? 'log-opt'
       docker_cmd.push info['image']
